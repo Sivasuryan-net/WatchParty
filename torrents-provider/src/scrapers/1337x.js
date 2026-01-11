@@ -34,7 +34,7 @@ const scraper = {
                         Size: sizeClean || size,
                         DateUploaded: date,
                         UploadedBy: uploader,
-                        Magnet: null // Will be fetched from detail page if needed
+                        Magnet: null
                     });
                 }
             });

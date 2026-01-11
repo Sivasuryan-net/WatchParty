@@ -1,13 +1,18 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const https = require('https');
+
+// Ignore SSL errors
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
 
 // Default headers to mimic browser requests
 const defaultHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate',
-    'Connection': 'keep-alive',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Connection': 'close',
     'Upgrade-Insecure-Requests': '1'
 };
 
@@ -18,12 +23,32 @@ async function fetchPage(url, customHeaders = {}) {
     try {
         const response = await axios.get(url, {
             headers: { ...defaultHeaders, ...customHeaders },
-            timeout: 15000,
-            maxRedirects: 5
+            timeout: 20000,
+            maxRedirects: 5,
+            httpsAgent: httpsAgent,
+            family: 4 // Force IPv4
         });
         return cheerio.load(response.data);
     } catch (error) {
         console.error(`Failed to fetch ${url}:`, error.message);
+        throw error;
+    }
+}
+
+/**
+ * Fetch JSON content from a URL
+ */
+async function fetchJson(url, customHeaders = {}) {
+    try {
+        const response = await axios.get(url, {
+            headers: { ...defaultHeaders, ...customHeaders },
+            timeout: 20000,
+            maxRedirects: 5,
+            httpsAgent: httpsAgent
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to fetch JSON ${url}:`, error.message);
         throw error;
     }
 }
@@ -145,6 +170,7 @@ function extractQuality(name) {
 
 module.exports = {
     fetchPage,
+    fetchJson,
     parseSizeToBytes,
     filterResults,
     sortResults,

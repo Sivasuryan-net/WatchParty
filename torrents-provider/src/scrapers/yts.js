@@ -1,6 +1,6 @@
-const { fetchPage, cleanName } = require('../utils/helpers');
+const { fetchPage, fetchJson, cleanName } = require('../utils/helpers');
 
-const BASE_URL = 'https://yts.mx';
+const BASE_URL = 'https://yts.lt';
 
 const scraper = {
     name: 'YTS',
@@ -10,9 +10,7 @@ const scraper = {
         const searchUrl = `${BASE_URL}/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&page=${page}&limit=50`;
 
         try {
-            const axios = require('axios');
-            const response = await axios.get(searchUrl, { timeout: 15000 });
-            const data = response.data;
+            const data = await fetchJson(searchUrl);
 
             if (!data.data || !data.data.movies) {
                 return [];
@@ -25,7 +23,7 @@ const scraper = {
                     results.push({
                         Name: `${movie.title} (${movie.year}) [${torrent.quality}] [${torrent.type}]`,
                         Url: movie.url,
-                        Magnet: `magnet:?xt=urn:btih:${torrent.hash}&dn=${encodeURIComponent(movie.title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80&tr=udp://tracker.coppersurfer.tk:6969&tr=udp://glotorrents.pw:6969/announce&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://torrent.gresille.org:80/announce&tr=udp://p4p.arenabg.com:1337&tr=udp://tracker.leechers-paradise.org:6969`,
+                        Magnet: `magnet:?xt=urn:btih:${torrent.hash}&dn=${encodeURIComponent(movie.title)}&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.demonii.com:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://tracker.torrent.eu.org:451/announce&tr=udp://tracker.moeking.me:6969/announce&tr=udp://opentracker.i2p.rocks:6969/announce&tr=udp://uppo.tproxy.fi:6969/announce&tr=udp://tracker.tiny-vps.com:6969/announce&tr=udp://tracker.openbittorrent.com:80/announce`,
                         Torrent: torrent.url,
                         Poster: movie.medium_cover_image,
                         Size: torrent.size,
