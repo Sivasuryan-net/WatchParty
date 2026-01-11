@@ -4,24 +4,25 @@ const rateLimit = require('express-rate-limit');
 
 // Import routes
 const apiRoutes = require('./routes/api');
+const sourcesRoutes = require('./routes/sources');
+const transcodeRoutes = require('./routes/transcode');
+const streamRoutes = require('./routes/stream');
+const imdbRoutes = require('./routes/imdb');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration - Allow all origins for development
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-// Rate limiting - 100 requests per minute per IP
+// Rate Limiting
 const limiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 100,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 3000, // Limit each IP to 3000 requests per windowMs
     message: {
         error: 'Too many requests, please try again later.',
-        retryAfter: '1 minute'
+        retryAfter: '15 minutes'
     },
     standardHeaders: true,
     legacyHeaders: false
@@ -33,29 +34,31 @@ app.use(express.json());
 // Health check endpoint
 app.get('/', (req, res) => {
     res.json({
-        name: 'WatchParty Torrents Provider',
-        version: '1.0.0',
+        name: 'WatchParty Video Streaming API',
+        version: '3.0.0',
         status: 'running',
         endpoints: {
+            // Torrent streaming
+            addTorrent: 'POST /api/stream/add { magnet: "..." }',
+            streamFile: 'GET /api/stream/:infoHash/:fileIndex',
+            streamStatus: 'GET /api/stream/status/:infoHash',
+            // Video sources
+            movieSources: '/api/sources/movie/:tmdbId',
+            tvSources: '/api/sources/tv/:tmdbId/:season/:episode',
+            // Transcoding
+            transcodeStream: '/api/transcode/stream?url=<video-url>',
+            // Search
             search: '/api/:site/:query/:page?',
-            allSites: '/api/all/:query/:page?',
-            sites: '/api/sites'
-        },
-        supportedSites: [
-            '1337x', 'yts', 'eztv', 'tgx', 'torlock', 'piratebay',
-            'nyaasi', 'rarbg', 'ettv', 'zooqle', 'kickass', 'bitsearch',
-            'glodls', 'magnetdl', 'limetorrent', 'torrentfunk', 'torrentproject'
-        ],
-        queryParams: {
-            quality: 'Filter by quality (720p, 1080p, 2160p, 4k)',
-            sortBy: 'Sort results (seeders, leechers, size, date)',
-            order: 'Sort order (asc, desc)',
-            limit: 'Limit number of results'
+            allSites: '/api/all/:query/:page?'
         }
     });
 });
 
 // API routes
+app.use('/api/stream', streamRoutes);
+app.use('/api/transcode', transcodeRoutes);
+app.use('/api/sources', sourcesRoutes);
+app.use('/api/imdb', imdbRoutes);
 app.use('/api', apiRoutes);
 
 // 404 handler
@@ -86,6 +89,16 @@ app.listen(PORT, () => {
 ║       Running on http://localhost:${PORT}                    ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
+});
+
+// Prevent crashes on unhandled errors (common with WebTorrent)
+process.on('uncaughtException', (err) => {
+    console.error('UNCAUGHT EXCEPTION:', err);
+    // Don't exit, keep running if possible
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('UNHANDLED REJECTION:', reason);
 });
 
 module.exports = app;
