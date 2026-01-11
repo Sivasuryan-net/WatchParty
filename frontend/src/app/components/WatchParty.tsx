@@ -1,5 +1,6 @@
 import { Play, Pause, RotateCcw, RotateCw, Volume2, Settings as SettingsIcon, Maximize, Mic, MicOff, Headphones, Send, Smile, Copy, LogOut, Link2, Loader2, Users, Download } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import Hls from 'hls.js';
 import type { Page } from '../App';
 import type { TorrentResult, ChatMessage } from '../types';
 import { useWebTorrent } from '../hooks/useWebTorrent';
@@ -8,35 +9,39 @@ interface WatchPartyProps {
   onNavigate: (page: Page, movieId?: string) => void;
   movieId: string | null;
   torrent: TorrentResult | null;
+  tmdbId?: string;
+  movieRuntime?: number | null; // Runtime in minutes from IMDB
 }
 
-const participants = [
-  { id: '1', name: 'You (Host)', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop', speaking: true, muted: false },
-  { id: '2', name: 'Alex', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop', speaking: false, muted: true },
-  { id: '3', name: 'Jordan', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop', speaking: false, muted: false },
-];
+// Current user (host)
+const currentUser = {
+  id: '1',
+  name: 'You (Host)',
+  avatar: null,
+  speaking: false,
+  muted: false
+};
 
-const initialMessages: ChatMessage[] = [
-  { id: '1', userId: '2', userName: 'Alex', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop', message: "Ready to watch! 🍿", timestamp: Date.now() - 120000 },
-  { id: '2', userId: '3', userName: 'Jordan', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop', message: "This is going to be good!", timestamp: Date.now() - 60000 },
-];
-
-export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
+export function WatchParty({ onNavigate, movieId, torrent, tmdbId, movieRuntime }: WatchPartyProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [bufferedTime, setBufferedTime] = useState(0); // How much is buffered
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [participants, setParticipants] = useState([currentUser]);
   const [newMessage, setNewMessage] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
 
-  // WebTorrent streaming
+  // Get magnet URI from torrent prop
   const magnetUri = torrent?.Magnet || null;
+
+  // Use native torrent streaming with FFmpeg transcoding
   const {
     isLoading,
     isReady,
     error,
-    progress,
     videoUrl,
     torrentName,
     downloadSpeedFormatted,
@@ -46,28 +51,130 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
   // Room code for sharing
   const roomCode = 'CINE-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 
-  // Video event handlers
+
+  // Video playback with HLS.js support
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
 
-    video.src = videoUrl;
+    console.log('[Video] Setting up playback for:', videoUrl);
+
+    // Cleanup previous HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    // Transcoded streams are MP4, no need for HLS.js check
+    const isHls = videoUrl.includes('.m3u8');
+
+    if (isHls && Hls.isSupported()) {
+      console.log('[Video] Using HLS.js for m3u8 stream');
+      const hls = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: true
+      });
+      hlsRef.current = hls;
+
+      hls.loadSource(videoUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log('[HLS] Manifest parsed, starting playback');
+        video.play().catch(e => console.log('[Video] Autoplay blocked:', e.message));
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('[HLS] Error:', data.type, data.details);
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log('[HLS] Network error, trying to recover...');
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('[HLS] Media error, trying to recover...');
+              hls.recoverMediaError();
+              break;
+            default:
+              console.error('[HLS] Fatal error, cannot recover');
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS support
+      console.log('[Video] Using native HLS support');
+      video.src = videoUrl;
+    } else {
+      // Direct video (MP4, WebM)
+      console.log('[Video] Using direct video playback');
+      video.src = videoUrl;
+    }
 
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
-    const handleDurationChange = () => setDuration(video.duration);
+    const handleDurationChange = () => {
+      // Only use video duration if we don't have movie runtime
+      if (!movieRuntime) {
+        setDuration(video.duration);
+      }
+    };
+    const handleProgress = () => {
+      // Track how much has been buffered
+      if (video.buffered.length > 0) {
+        const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+        setBufferedTime(bufferedEnd);
+      }
+    };
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
+    const handleCanPlay = () => {
+      console.log('[Video] Can play - video is ready');
+      // Wait until we have at least 10 seconds buffered before playing
+      const checkBuffer = () => {
+        if (video.buffered.length > 0) {
+          const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+          const bufferedSeconds = bufferedEnd - video.currentTime;
+          setBufferedTime(bufferedEnd);
+          console.log(`[Video] Buffered: ${bufferedSeconds.toFixed(1)}s`);
+          if (bufferedSeconds >= 10) {
+            video.play().catch(e => console.log('[Video] Autoplay blocked:', e.message));
+            return;
+          }
+        }
+        // Check again in 500ms
+        setTimeout(checkBuffer, 500);
+      };
+      checkBuffer();
+    };
+    const handleError = () => {
+      const error = video.error;
+      console.error('[Video] Error:', error?.code, error?.message);
+    };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('durationchange', handleDurationChange);
+    video.addEventListener('progress', handleProgress);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('error', handleError);
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('durationchange', handleDurationChange);
+      video.removeEventListener('progress', handleProgress);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('error', handleError);
+
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
     };
   }, [videoUrl]);
 
@@ -91,9 +198,7 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    return h > 0
-      ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-      : `${m}:${s.toString().padStart(2, '0')}`;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   const handleSendMessage = () => {
@@ -112,7 +217,10 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
     setNewMessage('');
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // Use movie runtime (in minutes) if available, otherwise use video duration
+  const totalDuration = movieRuntime ? movieRuntime * 60 : duration;
+  const progressPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+  const bufferedPercent = totalDuration > 0 ? (bufferedTime / totalDuration) * 100 : 0;
 
   return (
     <div className="bg-background text-white overflow-hidden h-screen w-full flex">
@@ -125,7 +233,7 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
               <Loader2 className="w-16 h-16 text-primary animate-spin" />
               <div>
                 <h3 className="text-xl font-bold text-white mb-2">Loading Stream...</h3>
-                <p className="text-gray-400 mb-4">{torrent?.Name || 'Connecting to peers'}</p>
+                <p className="text-gray-400 mb-4">{torrentName || 'Connecting to peers...'}</p>
                 <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
                   <span className="flex items-center gap-2">
                     <Download className="w-4 h-4" />
@@ -136,10 +244,6 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
                     {peers} peers
                   </span>
                 </div>
-                <div className="mt-4 w-64 h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }}></div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">{progress}% buffered</p>
               </div>
             </div>
           ) : error ? (
@@ -163,6 +267,7 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
                 className="w-full h-full object-contain"
                 playsInline
                 onClick={togglePlay}
+                controls={false}
               />
               {/* Play overlay when paused */}
               {!isPlaying && (
@@ -198,15 +303,19 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
             <div
               className="group/progress relative h-1.5 w-full bg-white/20 rounded-full cursor-pointer mb-4 hover:h-2.5 transition-all"
               onClick={(e) => {
-                if (videoRef.current && duration > 0) {
+                if (videoRef.current && totalDuration > 0) {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const x = e.clientX - rect.left;
                   const percent = x / rect.width;
-                  videoRef.current.currentTime = percent * duration;
+                  videoRef.current.currentTime = percent * totalDuration;
                 }
               }}
             >
+              {/* Buffered bar (grey) */}
+              <div className="absolute left-0 top-0 bottom-0 bg-white/40 rounded-full transition-all" style={{ width: `${bufferedPercent}%` }}></div>
+              {/* Played bar (primary color) */}
               <div className="absolute left-0 top-0 bottom-0 bg-primary rounded-full transition-all" style={{ width: `${progressPercent}%` }}></div>
+              {/* Scrubber dot */}
               <div className="absolute top-1/2 -translate-y-1/2 bg-white w-3 h-3 rounded-full opacity-0 group-hover/progress:opacity-100 shadow-[0_0_10px_rgba(244,37,244,0.5)] transition-opacity" style={{ left: `${progressPercent}%` }}></div>
             </div>
 
@@ -226,7 +335,7 @@ export function WatchParty({ onNavigate, movieId, torrent }: WatchPartyProps) {
                   <Volume2 className="w-5 h-5 text-white/80" />
                 </div>
                 <div className="ml-4 text-sm font-medium text-white/80 tabular-nums">
-                  {formatTime(currentTime)} <span className="text-white/40 mx-1">/</span> {formatTime(duration)}
+                  {formatTime(currentTime)} <span className="text-white/40 mx-1">/</span> {formatTime(totalDuration)}
                 </div>
               </div>
               {/* Right Controls */}
