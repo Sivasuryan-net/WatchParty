@@ -1,26 +1,23 @@
-import { Search as SearchIcon, X, Clock, Home, Users, Bookmark, User, Play, Loader2, HardDrive, Users as UsersIcon, Download } from 'lucide-react';
+import { Search as SearchIcon, X, Clock, Home, Users, Bookmark, User, Loader2, Star, Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Page } from '../App';
-import type { TorrentResult } from '../types';
-import { searchAllSites } from '../services/api';
+import { searchIMDBMovies, getPopularMovies, type IMDBMovie } from '../services/imdb';
 
 interface SearchProps {
   onNavigate: (page: Page, movieId?: string) => void;
-  onSelectTorrent?: (torrent: TorrentResult) => void;
 }
 
-const trendingParties = [
-  { id: '1', title: 'Midnight Horror Marathon', viewers: '1.2k', status: 'Started 10m ago', image: 'https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?w=600&h=400&fit=crop' },
-  { id: '2', title: 'Behind the Scenes: Dune', viewers: 'Docu-series • Season 1', image: 'https://images.unsplash.com/photo-1574267432644-f610c7c8bb08?w=600&h=400&fit=crop' },
-  { id: '3', title: 'Classic Cinema Club', viewers: '456', status: 'Started 30m ago', image: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&h=400&fit=crop' },
-];
-
-export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
+export function Search({ onNavigate }: SearchProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<TorrentResult[]>([]);
+  const [results, setResults] = useState<IMDBMovie[]>([]);
+  const [popular, setPopular] = useState<IMDBMovie[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [selectedQuality, setSelectedQuality] = useState<string>('all');
+
+  // Load popular movies on mount
+  useEffect(() => {
+    getPopularMovies().then(setPopular);
+  }, []);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -29,11 +26,7 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
     setHasSearched(true);
 
     try {
-      const response = await searchAllSites(query, {
-        sortBy: 'seeders',
-        limit: 30,
-        quality: selectedQuality !== 'all' ? selectedQuality : undefined,
-      });
+      const response = await searchIMDBMovies(query);
       setResults(response.results);
     } catch (error) {
       console.error('Search failed:', error);
@@ -49,26 +42,59 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
     }
   };
 
-  const handleResultClick = (result: TorrentResult) => {
-    if (onSelectTorrent && result.Magnet) {
-      onSelectTorrent(result);
-      onNavigate('watch', result.InfoHash || result.Name);
+  const handleMovieClick = (movie: IMDBMovie) => {
+    // Navigate to series page for TV shows, details page for movies
+    if (movie.type === 'series') {
+      onNavigate('series', `${movie.id}|${movie.title}`);
     } else {
-      onNavigate('details', result.Name);
+      onNavigate('details', `${movie.id}|${movie.title}`);
     }
   };
 
-  const formatSize = (size: string) => {
-    return size || 'Unknown';
-  };
-
-  const getQualityBadge = (name: string) => {
-    if (name.includes('2160p') || name.includes('4K')) return '4K';
-    if (name.includes('1080p')) return '1080p';
-    if (name.includes('720p')) return '720p';
-    if (name.includes('480p')) return '480p';
-    return null;
-  };
+  const MovieCard = ({ movie }: { movie: IMDBMovie }) => (
+    <div
+      onClick={() => handleMovieClick(movie)}
+      className="group cursor-pointer rounded-xl overflow-hidden bg-secondary/50 hover:bg-secondary border border-white/5 hover:border-primary/30 transition-all duration-300 hover:shadow-[0_0_20px_rgba(244,37,244,0.15)] hover:-translate-y-1"
+    >
+      {/* Poster */}
+      <div className="relative aspect-[2/3] overflow-hidden">
+        {movie.poster ? (
+          <img
+            src={movie.poster}
+            alt={movie.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-primary/30 to-purple-900/30 flex items-center justify-center">
+            <Play className="w-12 h-12 text-primary/60" />
+          </div>
+        )}
+        {/* Overlay on hover */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+          <button className="px-4 py-2 rounded-lg bg-primary text-white font-medium flex items-center gap-2 shadow-lg">
+            <Play className="w-4 h-4 fill-current" />
+            Watch
+          </button>
+        </div>
+        {/* Rating badge */}
+        {movie.rating && movie.rating > 0 && (
+          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm">
+            <Star className="w-3 h-3 text-yellow-400 fill-current" />
+            <span className="text-xs font-bold text-white">{movie.rating.toFixed(1)}</span>
+          </div>
+        )}
+      </div>
+      {/* Info */}
+      <div className="p-3">
+        <h4 className="text-white font-medium text-sm truncate group-hover:text-primary transition-colors">
+          {movie.title}
+        </h4>
+        {movie.year && (
+          <p className="text-gray-500 text-xs mt-1">{movie.year}</p>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen">
@@ -104,18 +130,6 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
             <span className="text-sm font-medium">Profile</span>
           </button>
         </nav>
-        <div className="p-6">
-          <div className="bg-gradient-to-br from-secondary to-black p-4 rounded-xl border border-white/5">
-            <p className="text-xs text-gray-400 mb-2">Currently Watching</p>
-            <div className="flex gap-3 items-center">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 border border-primary"></div>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-white">Sarah's Party</span>
-                <span className="text-xs text-primary">In Progress</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -127,7 +141,7 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
           {/* Header Section */}
           <div className="flex flex-col gap-2">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white drop-shadow-lg">What are we watching tonight?</h2>
-            <p className="text-gray-400 text-lg">Search movies, series, and start a watch party.</p>
+            <p className="text-gray-400 text-lg">Search movies and start a watch party with friends.</p>
           </div>
 
           {/* Search Bar */}
@@ -138,7 +152,7 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
               </div>
               <input
                 className="w-full h-full bg-transparent border-none text-white text-xl placeholder-gray-500 focus:ring-0 focus:outline-none"
-                placeholder="Search movies, series..."
+                placeholder="Search movies..."
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -161,91 +175,27 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
             </label>
           </div>
 
-          {/* Quality Filters */}
-          <div className="flex flex-wrap gap-3">
-            {['all', '720p', '1080p', '4K'].map((quality) => (
-              <button
-                key={quality}
-                onClick={() => setSelectedQuality(quality)}
-                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${selectedQuality === quality
-                    ? 'bg-primary text-white shadow-[0_0_10px_rgba(244,37,244,0.4)]'
-                    : 'bg-secondary border border-white/10 text-gray-300 hover:bg-secondary hover:border-gray-500 hover:text-white'
-                  }`}
-              >
-                {quality === 'all' ? 'All Quality' : quality}
-              </button>
-            ))}
-          </div>
-
           {/* Results */}
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="text-gray-400">Searching across all torrent sites...</p>
+              <p className="text-gray-400">Searching movies...</p>
             </div>
           ) : hasSearched && results.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <SearchIcon className="w-16 h-16 text-gray-600" />
-              <p className="text-gray-400 text-lg">No results found for "{query}"</p>
+              <p className="text-gray-400 text-lg">No movies found for "{query}"</p>
               <p className="text-gray-500 text-sm">Try a different search term</p>
             </div>
           ) : results.length > 0 ? (
             <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-white">{results.length} Results</h3>
-                <span className="text-sm text-gray-500">Sorted by seeders</span>
+                <h3 className="text-xl font-bold text-white">{results.length} Movies Found</h3>
               </div>
-              <div className="grid grid-cols-1 gap-4">
-                {results.map((result, index) => {
-                  const quality = getQualityBadge(result.Name);
-                  return (
-                    <div
-                      key={`${result.InfoHash || index}`}
-                      onClick={() => handleResultClick(result)}
-                      className="group flex items-center gap-4 p-4 bg-secondary/50 hover:bg-secondary rounded-xl border border-white/5 hover:border-primary/30 cursor-pointer transition-all duration-200"
-                    >
-                      {/* Poster/Icon */}
-                      <div className="w-16 h-20 rounded-lg bg-gradient-to-br from-primary/30 to-purple-900/30 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_15px_rgba(244,37,244,0.2)] transition-shadow">
-                        <Play className="w-8 h-8 text-primary/60 group-hover:text-primary transition-colors" />
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-white font-medium truncate group-hover:text-primary transition-colors">
-                          {result.Name}
-                        </h4>
-                        <div className="flex items-center gap-3 mt-2 flex-wrap">
-                          {quality && (
-                            <span className="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-bold">
-                              {quality}
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1 text-gray-400 text-sm">
-                            <HardDrive className="w-3.5 h-3.5" />
-                            {formatSize(result.Size)}
-                          </span>
-                          <span className="flex items-center gap-1 text-green-400 text-sm">
-                            <UsersIcon className="w-3.5 h-3.5" />
-                            {result.Seeders} seeders
-                          </span>
-                          <span className="text-gray-500 text-xs uppercase">{result.source}</span>
-                        </div>
-                      </div>
-
-                      {/* Action */}
-                      <button
-                        className="px-4 py-2 rounded-lg bg-primary/10 text-primary font-medium hover:bg-primary hover:text-white transition-colors flex items-center gap-2 shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleResultClick(result);
-                        }}
-                      >
-                        <Play className="w-4 h-4" />
-                        Watch
-                      </button>
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {results.map((movie) => (
+                  <MovieCard key={movie.id} movie={movie} />
+                ))}
               </div>
             </div>
           ) : (
@@ -254,7 +204,7 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
               <div className="flex flex-col gap-4 py-4 border-b border-white/5 pb-8">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500">Recent Searches</h3>
                 <div className="flex flex-wrap gap-4">
-                  {['Avengers Endgame', 'Breaking Bad', 'Interstellar'].map((term) => (
+                  {['Interstellar', 'The Dark Knight', 'Inception'].map((term) => (
                     <div
                       key={term}
                       onClick={() => { setQuery(term); }}
@@ -267,35 +217,19 @@ export function Search({ onNavigate, onSelectTorrent }: SearchProps) {
                 </div>
               </div>
 
-              {/* Trending Section */}
-              <div className="flex flex-col gap-6">
-                <div className="flex justify-between items-end">
-                  <h3 className="text-xl font-bold text-white">Trending on CineParty</h3>
-                  <a className="text-primary text-sm font-medium hover:text-white transition-colors cursor-pointer">View All</a>
+              {/* Popular Section */}
+              {popular.length > 0 && (
+                <div className="flex flex-col gap-6">
+                  <div className="flex justify-between items-end">
+                    <h3 className="text-xl font-bold text-white">Popular Movies</h3>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                    {popular.slice(0, 12).map((movie) => (
+                      <MovieCard key={movie.id} movie={movie} />
+                    ))}
+                  </div>
                 </div>
-                <div className="flex gap-4 overflow-x-auto pb-4">
-                  {trendingParties.map((party) => (
-                    <div key={party.id} className="w-64 shrink-0 group rounded-xl bg-secondary border border-white/5 p-3 hover:bg-secondary/80 transition-colors cursor-pointer" onClick={() => onNavigate('watch', party.id)}>
-                      <div className="relative aspect-video rounded-lg overflow-hidden mb-3">
-                        <img
-                          alt={party.title}
-                          className="w-full h-full object-cover"
-                          src={party.image}
-                        />
-                        {party.status && (
-                          <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-sm uppercase tracking-wide">
-                            Live Now
-                          </div>
-                        )}
-                      </div>
-                      <h4 className="text-white font-bold text-base truncate">{party.title}</h4>
-                      <p className="text-gray-400 text-xs mt-1">
-                        {party.status ? `${party.viewers} watching • ${party.status}` : party.viewers}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </>
           )}
         </div>

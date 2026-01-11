@@ -1,34 +1,84 @@
-import { Play, Plus, Info, Star, Users, ChevronLeft, ChevronRight, Bell, Settings, LogOut } from 'lucide-react';
+import { Play, Plus, Info, Star, Users, ChevronLeft, ChevronRight, Bell, Settings, LogOut, Loader2, Calendar, Tv, Film } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import type { Page } from '../App';
+import { getPopularMovies, getTVSeries, getComingSoon, type IMDBMovie } from '../services/imdb';
 
 interface HomeProps {
   onNavigate: (page: Page, movieId?: string) => void;
 }
 
-const trendingMovies = [
-  { id: '1', title: 'The Batman', genre: 'Action', year: '2022', rating: '4.5', image: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=400&h=600&fit=crop' },
-  { id: '2', title: 'Oppenheimer', genre: 'Drama', year: '2023', rating: '4.8', image: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop' },
-  { id: '3', title: 'Spider-Verse', genre: 'Animation', year: '2023', rating: '4.9', image: 'https://images.unsplash.com/photo-1509281373149-e957c6296406?w=400&h=600&fit=crop' },
-  { id: '4', title: 'Interstellar', genre: 'Sci-Fi', year: '2014', rating: '4.7', image: 'https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=400&h=600&fit=crop' },
-  { id: '5', title: 'Inception', genre: 'Sci-Fi', year: '2010', rating: '4.6', image: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=600&fit=crop' },
-  { id: '6', title: 'Blade Runner 2049', genre: 'Sci-Fi', year: '2017', rating: '4.3', image: 'https://images.unsplash.com/photo-1518895312237-a9e23508077d?w=400&h=600&fit=crop' },
-];
-
-const liveParties = [
-  { id: '1', title: 'The Matrix Marathon', host: 'NeoFan99', watching: 45, timeLeft: '1h 14m left', progress: 66, image: 'https://images.unsplash.com/photo-1574267432644-f610c7c8bb08?w=600&h=400&fit=crop' },
-  { id: '2', title: 'Friday Horror Night', host: 'SpookyDave', watching: 14, timeLeft: 'Starting now', progress: 25, image: 'https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?w=600&h=400&fit=crop' },
-  { id: '3', title: 'John Wick 4', host: 'ActionJunkie', watching: 10, timeLeft: '25m left', progress: 75, image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&h=400&fit=crop' },
-];
-
-const recommendedMovies = [
-  { id: '7', title: 'Arrival', genre: 'Sci-Fi', year: '2016', rating: '8.9', image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&h=600&fit=crop' },
-  { id: '8', title: 'Rogue One', genre: 'Action', year: '2016', rating: '8.7', image: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=400&h=600&fit=crop' },
-  { id: '9', title: 'Mad Max: Fury Road', genre: 'Action', year: '2015', rating: '8.1', image: 'https://images.unsplash.com/photo-1513106580091-1d82408b8cd6?w=400&h=600&fit=crop' },
-  { id: '10', title: 'Foundation', genre: 'TV Series', year: '2021', rating: '7.9', image: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&h=600&fit=crop' },
-  { id: '11', title: 'Gravity', genre: 'Sci-Fi', year: '2013', rating: '8.0', image: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&h=600&fit=crop' },
-];
-
 export function Home({ onNavigate }: HomeProps) {
+  const [movies, setMovies] = useState<IMDBMovie[]>([]);
+  const [series, setSeries] = useState<IMDBMovie[]>([]);
+  const [comingSoon, setComingSoon] = useState<IMDBMovie[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [featuredMovie, setFeaturedMovie] = useState<IMDBMovie | null>(null);
+
+  // Load all content on mount
+  useEffect(() => {
+    setIsLoading(true);
+    Promise.all([
+      getPopularMovies(),
+      getTVSeries(),
+      getComingSoon()
+    ]).then(([moviesData, seriesData, comingSoonData]) => {
+      setMovies(moviesData);
+      setSeries(seriesData);
+      setComingSoon(comingSoonData);
+      if (moviesData.length > 0) {
+        setFeaturedMovie(moviesData[0]);
+      }
+    }).finally(() => setIsLoading(false));
+  }, []);
+
+  const handleMovieClick = (movie: IMDBMovie) => {
+    const prefix = movie.comingSoon ? 'coming|' : '';
+    // Navigate to series page for TV shows, details page for movies
+    if (movie.type === 'series') {
+      onNavigate('series', `${movie.id}|${movie.title}`);
+    } else {
+      onNavigate('details', `${movie.id}|${prefix}${movie.title}`);
+    }
+  };
+
+  const MovieCard = ({ movie, showComingSoon = false }: { movie: IMDBMovie; showComingSoon?: boolean }) => (
+    <div className="flex-none w-[200px] group cursor-pointer snap-start" onClick={() => handleMovieClick(movie)}>
+      <div
+        className="aspect-[2/3] rounded-lg bg-gray-800 bg-cover bg-center mb-3 relative overflow-hidden shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-[0_0_25px_rgba(244,37,244,0.2)]"
+        style={{ backgroundImage: movie.poster ? `url(${movie.poster})` : 'none' }}
+      >
+        {!movie.poster && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Play className="w-8 h-8 text-gray-600" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <Play className="w-12 h-12 text-white drop-shadow-lg scale-50 group-hover:scale-100 transition-transform duration-300 fill-current" />
+        </div>
+        {showComingSoon && movie.releaseDate && (
+          <div className="absolute top-2 left-2 px-2 py-1 rounded bg-primary/90 text-white text-xs font-bold flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {new Date(movie.releaseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </div>
+        )}
+        {!showComingSoon && movie.rating && (
+          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur text-xs font-bold text-primary border border-white/10">
+            {movie.rating.toFixed(1)} ★
+          </div>
+        )}
+        {movie.type === 'series' && (
+          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-blue-500/80 text-white text-xs font-bold">
+            TV Series
+          </div>
+        )}
+      </div>
+      <h3 className="text-white font-medium truncate group-hover:text-primary transition-colors">{movie.title}</h3>
+      {movie.year && (
+        <p className="text-xs text-gray-400">{movie.year}</p>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -60,35 +110,23 @@ export function Home({ onNavigate }: HomeProps) {
             <Users className="w-5 h-5" />
             <span className="font-medium text-sm">Your Parties</span>
           </button>
-          <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-            </svg>
-            <span className="font-medium text-sm">Friends</span>
-          </button>
 
           <p className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-6">General</p>
           <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
             <Settings className="w-5 h-5" />
             <span className="font-medium text-sm">Settings</span>
           </button>
-          <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="font-medium text-sm">Help & Support</span>
-          </button>
         </nav>
 
         <div className="p-4 border-t border-white/5">
-          <button className="w-full flex items-center justify-center gap-2 rounded-lg h-12 bg-primary hover:bg-primary/90 transition-colors text-white font-bold shadow-[0_0_20px_rgba(244,37,244,0.4)] group">
+          <button onClick={() => onNavigate('search')} className="w-full flex items-center justify-center gap-2 rounded-lg h-12 bg-primary hover:bg-primary/90 transition-colors text-white font-bold shadow-[0_0_20px_rgba(244,37,244,0.4)] group">
             <Plus className="w-5 h-5 group-hover:animate-pulse" />
             <span>Start Party</span>
           </button>
           <div className="mt-4 flex items-center gap-3 px-2">
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 border border-white/10"></div>
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-white">Sarah Jenkins</span>
+              <span className="text-sm font-medium text-white">Guest User</span>
               <span className="text-xs text-gray-400">Online</span>
             </div>
             <button className="ml-auto text-gray-500 hover:text-white">
@@ -107,59 +145,62 @@ export function Home({ onNavigate }: HomeProps) {
             <button className="h-10 w-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition">
               <Bell className="w-5 h-5" />
             </button>
-            <button className="h-10 w-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
           </div>
         </header>
 
         {/* Hero Section */}
         <div className="relative w-full h-[70vh] min-h-[550px] max-h-[800px]">
-          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&h=1080&fit=crop)' }}>
-            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent"></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
-          </div>
+          {isLoading ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-background">
+              <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            </div>
+          ) : featuredMovie ? (
+            <>
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: featuredMovie.poster ? `url(${featuredMovie.poster})` : 'url(https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&h=1080&fit=crop)' }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
+              </div>
 
-          <div className="relative h-full flex flex-col justify-end p-8 pb-16 md:p-16 max-w-4xl">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded text-xs font-bold uppercase tracking-wider text-white border border-white/10">Featured</span>
-              <span className="flex items-center gap-1 text-primary text-sm font-bold">
-                <Star className="w-4 h-4 fill-current" /> 9.2
-              </span>
-              <span className="text-gray-300 text-sm">2024 • Sci-Fi • 2h 46m</span>
-            </div>
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 text-white drop-shadow-2xl">
-              Dune: Part Two
-            </h1>
-            <p className="text-gray-300 text-lg md:text-xl max-w-2xl mb-8 leading-relaxed line-clamp-3">
-              Paul Atreides unites with Chani and the Fremen while on a warpath of revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the known universe...
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <button onClick={() => onNavigate('details', 'dune')} className="h-12 px-8 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold flex items-center gap-2 transition-transform hover:scale-105 shadow-[0_0_20px_rgba(244,37,244,0.3)]">
-                <Play className="w-5 h-5 fill-current" />
-                Watch Now
-              </button>
-              <button className="h-12 px-8 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold flex items-center gap-2 transition-transform hover:scale-105 border border-white/10">
-                <Plus className="w-5 h-5" />
-                Add to List
-              </button>
-              <button className="h-12 w-12 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md text-white flex items-center justify-center transition-colors border border-white/10 ml-2">
-                <Info className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+              <div className="relative h-full flex flex-col justify-end p-8 pb-16 md:p-16 max-w-4xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded text-xs font-bold uppercase tracking-wider text-white border border-white/10">Featured</span>
+                  {featuredMovie.rating && (
+                    <span className="flex items-center gap-1 text-primary text-sm font-bold">
+                      <Star className="w-4 h-4 fill-current" /> {featuredMovie.rating.toFixed(1)}
+                    </span>
+                  )}
+                  {featuredMovie.year && (
+                    <span className="text-gray-300 text-sm">{featuredMovie.year}</span>
+                  )}
+                </div>
+                <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 text-white drop-shadow-2xl">
+                  {featuredMovie.title}
+                </h1>
+                <div className="flex flex-wrap gap-4">
+                  <button onClick={() => handleMovieClick(featuredMovie)} className="h-12 px-8 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold flex items-center gap-2 transition-transform hover:scale-105 shadow-[0_0_20px_rgba(244,37,244,0.3)]">
+                    <Play className="w-5 h-5 fill-current" />
+                    Watch Now
+                  </button>
+                  <button onClick={() => handleMovieClick(featuredMovie)} className="h-12 w-12 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md text-white flex items-center justify-center transition-colors border border-white/10">
+                    <Info className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* Content Rows */}
         <div className="relative z-10 pb-20 -mt-10 px-8 flex flex-col gap-12">
-          {/* Trending Now */}
+          {/* Movies Section */}
           <section>
             <div className="flex items-center justify-between mb-4 px-2">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <span className="w-1 h-6 bg-primary rounded-full"></span>
-                Trending Now
+                <Film className="w-6 h-6 text-primary" />
+                Popular Movies
               </h2>
               <div className="flex gap-2">
                 <button className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition">
@@ -170,85 +211,61 @@ export function Home({ onNavigate }: HomeProps) {
                 </button>
               </div>
             </div>
-            <div className="flex overflow-x-auto gap-5 pb-6 pt-2 px-2 no-scrollbar snap-x">
-              {trendingMovies.map((movie) => (
-                <div key={movie.id} className="flex-none w-[200px] group cursor-pointer snap-start" onClick={() => onNavigate('details', movie.id)}>
-                  <div className="aspect-[2/3] rounded-lg bg-gray-800 bg-cover bg-center mb-3 relative overflow-hidden shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-[0_0_25px_rgba(244,37,244,0.2)]" style={{ backgroundImage: `url(${movie.image})` }}>
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Play className="w-12 h-12 text-white drop-shadow-lg scale-50 group-hover:scale-100 transition-transform duration-300 fill-current" />
-                    </div>
-                    <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur text-xs font-bold text-primary border border-white/10">{movie.rating} ★</div>
-                  </div>
-                  <h3 className="text-white font-medium truncate group-hover:text-primary transition-colors">{movie.title}</h3>
-                  <p className="text-xs text-gray-400">{movie.genre} • {movie.year}</p>
-                </div>
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : (
+              <div className="flex overflow-x-auto gap-5 pb-6 pt-2 px-2 no-scrollbar snap-x">
+                {movies.slice(1, 12).map((movie) => (
+                  <MovieCard key={movie.id} movie={movie} />
+                ))}
+              </div>
+            )}
           </section>
 
-          {/* Live Parties */}
+          {/* TV Series Section */}
           <section>
             <div className="flex items-center justify-between mb-4 px-2">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <span className="w-1 h-6 bg-red-500 rounded-full animate-pulse"></span>
-                Live Parties
+                <Tv className="w-6 h-6 text-blue-400" />
+                Popular TV Series
               </h2>
-              <a className="text-sm text-primary font-medium hover:text-white transition-colors cursor-pointer">View All</a>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 px-2">
-              {liveParties.map((party) => (
-                <div key={party.id} className="bg-card rounded-xl overflow-hidden hover:ring-2 hover:ring-primary transition-all group cursor-pointer border border-white/5" onClick={() => onNavigate('watch', party.id)}>
-                  <div className="h-40 bg-cover bg-center relative" style={{ backgroundImage: `url(${party.image})` }}>
-                    <div className="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 animate-pulse">
-                      <span className="w-2 h-2 bg-white rounded-full"></span> LIVE
-                    </div>
-                    <div className="absolute bottom-0 left-0 w-full p-3 bg-gradient-to-t from-black/90 to-transparent">
-                      <div className="flex -space-x-2">
-                        <div className="w-8 h-8 rounded-full border-2 border-background bg-gradient-to-br from-blue-400 to-purple-500"></div>
-                        <div className="w-8 h-8 rounded-full border-2 border-background bg-gradient-to-br from-green-400 to-teal-500"></div>
-                        <div className="w-8 h-8 rounded-full border-2 border-background bg-gradient-to-br from-pink-400 to-red-500"></div>
-                        <div className="w-8 h-8 rounded-full border-2 border-background bg-primary text-white text-[10px] font-bold flex items-center justify-center">+{party.watching - 3}</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-4">
-                    <h3 className="text-lg font-bold text-white mb-1">{party.title}</h3>
-                    <p className="text-sm text-gray-400 mb-3">Hosted by <span className="text-white">{party.host}</span></p>
-                    <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mb-2">
-                      <div className="h-full bg-primary" style={{ width: `${party.progress}%` }}></div>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>{party.timeLeft}</span>
-                      <span>{party.watching} watching</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : (
+              <div className="flex overflow-x-auto gap-5 pb-6 pt-2 px-2 no-scrollbar snap-x">
+                {series.slice(0, 12).map((show) => (
+                  <MovieCard key={show.id} movie={{ ...show, type: 'series' }} />
+                ))}
+              </div>
+            )}
           </section>
 
-          {/* Recommended */}
+          {/* Coming Soon Section */}
           <section>
             <div className="flex items-center justify-between mb-4 px-2">
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <span className="w-1 h-6 bg-primary rounded-full"></span>
-                Because you watched <span className="text-primary italic">Dune</span>
+                <Calendar className="w-6 h-6 text-yellow-400" />
+                Coming Soon
               </h2>
             </div>
-            <div className="flex overflow-x-auto gap-5 pb-6 pt-2 px-2 no-scrollbar snap-x">
-              {recommendedMovies.map((movie) => (
-                <div key={movie.id} className="flex-none w-[200px] group cursor-pointer snap-start" onClick={() => onNavigate('details', movie.id)}>
-                  <div className="aspect-[2/3] rounded-lg bg-gray-800 bg-cover bg-center mb-3 relative overflow-hidden shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-[0_0_25px_rgba(244,37,244,0.2)]" style={{ backgroundImage: `url(${movie.image})` }}>
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Play className="w-12 h-12 text-white drop-shadow-lg scale-50 group-hover:scale-100 transition-transform duration-300 fill-current" />
-                    </div>
-                    <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur text-xs font-bold text-primary border border-white/10">{movie.rating}</div>
-                  </div>
-                  <h3 className="text-white font-medium truncate group-hover:text-primary transition-colors">{movie.title}</h3>
-                  <p className="text-xs text-gray-400">{movie.genre} • {movie.year}</p>
-                </div>
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : comingSoon.length > 0 ? (
+              <div className="flex overflow-x-auto gap-5 pb-6 pt-2 px-2 no-scrollbar snap-x">
+                {comingSoon.map((movie) => (
+                  <MovieCard key={movie.id} movie={movie} showComingSoon />
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-500 text-center py-8">No upcoming releases found</div>
+            )}
           </section>
         </div>
       </main>
