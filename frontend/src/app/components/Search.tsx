@@ -1,7 +1,7 @@
 import { Search as SearchIcon, X, Clock, Home, Users, Bookmark, User, Loader2, Star, Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Page } from '../App';
-import { searchIMDBMovies, getPopularMovies, type IMDBMovie } from '../services/imdb';
+import { searchIMDBMovies, getPopularMovies, proxyImageUrl, type IMDBMovie } from '../services/imdb';
 
 interface SearchProps {
   onNavigate: (page: Page, movieId?: string) => void;
@@ -60,7 +60,7 @@ export function Search({ onNavigate }: SearchProps) {
       <div className="relative aspect-[2/3] overflow-hidden">
         {movie.poster ? (
           <img
-            src={movie.poster}
+            src={proxyImageUrl(movie.poster) || ''}
             alt={movie.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />

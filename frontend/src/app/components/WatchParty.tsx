@@ -5,6 +5,8 @@ import type { Page } from '../App';
 import type { TorrentResult, ChatMessage } from '../types';
 import { useWebTorrent } from '../hooks/useWebTorrent';
 
+import { useAuth } from '../context/AuthContext';
+
 interface WatchPartyProps {
   onNavigate: (page: Page, movieId?: string) => void;
   movieId: string | null;
@@ -13,23 +15,34 @@ interface WatchPartyProps {
   movieRuntime?: number | null; // Runtime in minutes from IMDB
 }
 
-// Current user (host)
-const currentUser = {
-  id: '1',
-  name: 'You (Host)',
-  avatar: null,
-  speaking: false,
-  muted: false
-};
-
 export function WatchParty({ onNavigate, movieId, torrent, tmdbId, movieRuntime }: WatchPartyProps) {
+  const { user } = useAuth();
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedTime, setBufferedTime] = useState(0); // How much is buffered
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [participants, setParticipants] = useState([currentUser]);
+
+  // Initialize participants with current user
+  const [participants, setParticipants] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) {
+      onNavigate('login');
+      return;
+    }
+
+    setParticipants([{
+      id: user.id,
+      name: `${user.username} (Host)`,
+      avatar: user.avatar,
+      speaking: false,
+      muted: false,
+      isHost: true
+    }]);
+  }, [user, onNavigate]);
+
   const [newMessage, setNewMessage] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -202,13 +215,13 @@ export function WatchParty({ onNavigate, movieId, torrent, tmdbId, movieRuntime 
   };
 
   const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !user) return;
 
     const message: ChatMessage = {
       id: Date.now().toString(),
-      userId: '1',
-      userName: 'You',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
+      userId: user.id,
+      userName: user.username,
+      avatar: user.avatar,
       message: newMessage,
       timestamp: Date.now(),
     };

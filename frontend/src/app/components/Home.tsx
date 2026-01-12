@@ -1,13 +1,15 @@
 import { Play, Plus, Info, Star, Users, ChevronLeft, ChevronRight, Bell, Settings, LogOut, Loader2, Calendar, Tv, Film } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Page } from '../App';
-import { getPopularMovies, getTVSeries, getComingSoon, type IMDBMovie } from '../services/imdb';
+import { getPopularMovies, getTVSeries, getComingSoon, proxyImageUrl, type IMDBMovie } from '../services/imdb';
+import { useAuth } from '../context/AuthContext';
 
 interface HomeProps {
   onNavigate: (page: Page, movieId?: string) => void;
 }
 
 export function Home({ onNavigate }: HomeProps) {
+  const { user, logout } = useAuth();
   const [movies, setMovies] = useState<IMDBMovie[]>([]);
   const [series, setSeries] = useState<IMDBMovie[]>([]);
   const [comingSoon, setComingSoon] = useState<IMDBMovie[]>([]);
@@ -45,7 +47,7 @@ export function Home({ onNavigate }: HomeProps) {
     <div className="flex-none w-[200px] group cursor-pointer snap-start" onClick={() => handleMovieClick(movie)}>
       <div
         className="aspect-[2/3] rounded-lg bg-gray-800 bg-cover bg-center mb-3 relative overflow-hidden shadow-lg transition-transform duration-300 group-hover:scale-105 group-hover:shadow-[0_0_25px_rgba(244,37,244,0.2)]"
-        style={{ backgroundImage: movie.poster ? `url(${movie.poster})` : 'none' }}
+        style={{ backgroundImage: movie.poster ? `url(${proxyImageUrl(movie.poster)})` : 'none' }}
       >
         {!movie.poster && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -123,15 +125,26 @@ export function Home({ onNavigate }: HomeProps) {
             <Plus className="w-5 h-5 group-hover:animate-pulse" />
             <span>Start Party</span>
           </button>
+
           <div className="mt-4 flex items-center gap-3 px-2">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 border border-white/10"></div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-white">Guest User</span>
-              <span className="text-xs text-gray-400">Online</span>
-            </div>
-            <button className="ml-auto text-gray-500 hover:text-white">
-              <LogOut className="w-5 h-5" />
-            </button>
+            {user ? (
+              <>
+                <div className="h-10 w-10 rounded-full bg-cover bg-center border border-white/10" style={{ backgroundImage: `url(${user.avatar})` }}></div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-white">{user.username}</span>
+                  <span className="text-xs text-gray-400">Online</span>
+                </div>
+                <button onClick={logout} className="ml-auto text-gray-500 hover:text-white" title="Logout">
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </>
+            ) : (
+              <div className="w-full">
+                <button onClick={() => onNavigate('login')} className="w-full flex items-center justify-center gap-2 rounded-lg h-10 bg-white/10 hover:bg-white/20 transition-colors text-white font-medium">
+                  <span>Sign In</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </aside>

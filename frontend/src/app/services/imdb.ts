@@ -2,7 +2,25 @@
  * IMDB API Service - Frontend client for IMDB endpoints
  */
 
-const API_URL = 'http://localhost:3001';
+// Dynamic API URL that works in both Docker and dev
+const getApiUrl = () => {
+    if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        return `${protocol}//${hostname}:3001`;
+    }
+    return 'http://localhost:3001';
+};
+
+const API_URL = getApiUrl();
+
+/**
+ * Proxy image URL through backend to avoid COEP blocking
+ */
+export function proxyImageUrl(url: string | null): string | null {
+    if (!url) return null;
+    return `${API_URL}/api/proxy/image?url=${encodeURIComponent(url)}`;
+}
 
 export interface IMDBMovie {
     id: string;

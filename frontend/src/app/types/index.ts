@@ -1,4 +1,4 @@
-// Torrent search result from torrents-provider API
+// Torrent search result from backend API
 export interface TorrentResult {
     Name: string;
     Url: string;

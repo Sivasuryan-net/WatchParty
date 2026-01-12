@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const apiRoutes = require('./routes/api');
 const sourcesRoutes = require('./routes/sources');
 const transcodeRoutes = require('./routes/transcode');
-const streamRoutes = require('./routes/stream');
+// const streamRoutes = require('./routes/stream'); // Removed
 const imdbRoutes = require('./routes/imdb');
 
 const app = express();
@@ -54,8 +54,14 @@ app.get('/', (req, res) => {
     });
 });
 
+// Connect to database
+const connectDB = require('./config/db');
+connectDB();
+
 // API routes
-app.use('/api/stream', streamRoutes);
+app.use('/api/auth', require('./routes/auth'));
+// app.use('/api/stream', streamRoutes); // Removed
+app.use('/api/proxy', require('./routes/proxy')); // Image proxy
 app.use('/api/transcode', transcodeRoutes);
 app.use('/api/sources', sourcesRoutes);
 app.use('/api/imdb', imdbRoutes);
@@ -82,11 +88,11 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║       WatchParty Torrents Provider API                    ║
-║       Running on http://localhost:${PORT}                    ║
+║       WatchParty Backend API                              ║
+║       Running on http://0.0.0.0:${PORT}                      ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
 });

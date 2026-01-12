@@ -1,6 +1,16 @@
 import type { TorrentSearchResponse, SitesResponse } from '../types';
 
-const TORRENTS_API_URL = 'http://localhost:3001';
+// Dynamic API URL that works in both Docker and dev environments
+// In Docker: frontend on :3000, backend on :3001, same hostname
+// In dev: frontend on :5173, backend on :3001, both localhost
+const TORRENTS_API_URL = (() => {
+    if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        return `${protocol}//${hostname}:3001`;
+    }
+    return 'http://localhost:3001'; // SSR fallback
+})();
 
 interface SearchOptions {
     quality?: string;
@@ -112,3 +122,41 @@ export async function getBestSource(movieTitle: string) {
 
     return results.results[0] || null;
 }
+
+export const auth = {
+    register: async (userData: any) => {
+        const response = await fetch(`${TORRENTS_API_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Registration failed');
+        }
+        return response.json();
+    },
+
+    login: async (credentials: any) => {
+        const response = await fetch(`${TORRENTS_API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(credentials),
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Login failed');
+        }
+        return response.json();
+    },
+
+    getMe: async (token: string) => {
+        const response = await fetch(`${TORRENTS_API_URL}/api/auth/me`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!response.ok) throw new Error('Failed to get user');
+        return response.json();
+    }
+};
